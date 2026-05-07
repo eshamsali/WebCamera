@@ -188,7 +188,7 @@ document.addEventListener('keyup', (e) => {
 // ======= WebRTC - استقبال البث =======
 window.connect = async function() {
   connectBtn.disabled = true;
-  setStatus("⏳ جاري الاتصال...", "waiting");
+  setStatus("⏳ Waiting for controller...", "waiting");
 
   pc = new RTCPeerConnection(servers);
 
@@ -223,7 +223,7 @@ window.connect = async function() {
     await pc.setLocalDescription(answer);
     await set(ref(db, "webrtc/answer"), { type: answer.type, sdp: answer.sdp });
 
-    setStatus("🟡 The signal was exhange...", "waiting");
+    setStatus("🟡 Signal exhanged...", "waiting");
   });
 
   // استقبل ICE candidates من الكاميرا
