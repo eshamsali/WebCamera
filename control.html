@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🎮 تحكم في العربية</title>
+  <title> Control The Car</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -104,13 +104,13 @@
 </head>
 <body>
 
-  <h1>🎮 تحكم عن بُعد</h1>
+  <h1>Remote control </h1>
 
   <video id="remoteVideo" autoplay playsinline muted></video>
 
-  <div id="status" class="waiting">⏳ في انتظار الكاميرا...</div>
+  <div id="status" class="waiting">⏳ Waiting for the camera..</div>
 
-  <button class="connect-btn" id="connectBtn" onclick="connect()">اتصل بالعربية</button>
+  <button class="connect-btn" id="connectBtn" onclick="connect()">Connect to the car</button>
 
   <div class="dpad">
     <div class="empty"></div>
@@ -202,12 +202,12 @@ window.connect = async function() {
   // استقبل الفيديو
   pc.ontrack = (e) => {
     document.getElementById("remoteVideo").srcObject = e.streams[0];
-    setStatus("🟢 متصل - الكاميرا شغالة", "connected");
+    setStatus("🟢Connected", "connected");
   };
 
   pc.onconnectionstatechange = () => {
     if (pc.connectionState === "disconnected") {
-      setStatus("🔴 انقطع الاتصال", "error");
+      setStatus("🔴 Connection lost", "error");
       connectBtn.disabled = false;
     }
   };
@@ -223,7 +223,7 @@ window.connect = async function() {
     await pc.setLocalDescription(answer);
     await set(ref(db, "webrtc/answer"), { type: answer.type, sdp: answer.sdp });
 
-    setStatus("🟡 تم تبادل الإشارة...", "waiting");
+    setStatus("🟡 The signal was exhange...", "waiting");
   });
 
   // استقبل ICE candidates من الكاميرا
