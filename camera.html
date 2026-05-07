@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Car Camera</title>
+  <title>📷 Car Camera</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -65,13 +65,10 @@
 </head>
 <body>
 
-  <h1>📷 كاميرا العربية</h1>
-
+  <h1>📷 Car Camera</h1>
   <video id="localVideo" autoplay playsinline muted></video>
-
-  <div id="status" class="waiting">Ready To Start</div>
-
-  <button id="startBtn" onclick="startCamera()">Start Steaming</button>
+  <div id="status" class="waiting">⏳ Ready</div>
+  <button id="startBtn" onclick="startCamera()">Start Stream</button>
 
 <script type="module">
 
@@ -107,14 +104,14 @@ function setStatus(msg, cls) {
 
 window.startCamera = async function () {
   startBtn.disabled = true;
-  setStatus("⏳ جاري فتح الكاميرا...", "waiting");
+  setStatus("⏳ Opening camera...", "waiting");
 
-  // امسح أي session قديم
+  // Clear any old session
   await remove(ref(db, "webrtc"));
 
   pc = new RTCPeerConnection(servers);
 
-  // ابعت ICE candidates بتاعتنا (الـ offer side)
+  // Send our ICE candidates (offer side)
   pc.onicecandidate = async (e) => {
     if (e.candidate) {
       await set(ref(db, "webrtc/offerCandidate"), JSON.stringify(e.candidate));
@@ -122,16 +119,16 @@ window.startCamera = async function () {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "connected")  setStatus("🟢 Connected ", "connected");
-    if (pc.connectionState === "disconnected") setStatus("🔴 Connection lost", "error");
+    if (pc.connectionState === "connected")  setStatus("🟢 Connected - Stream is live", "connected");
+    if (pc.connectionState === "disconnected") setStatus("🔴 Disconnected", "error");
   };
 
-  // افتح الكاميرا
+  // Open camera
   let stream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
   } catch (err) {
-    setStatus("❌ مش قادر يفتح الكاميرا: " + err.message, "error");
+    setStatus("❌ Cannot open camera: " + err.message, "error");
     startBtn.disabled = false;
     return;
   }
@@ -139,23 +136,23 @@ window.startCamera = async function () {
   document.getElementById("localVideo").srcObject = stream;
   stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-  // اعمل offer وارفعه على Firebase
+  // Create offer and upload to Firebase
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
   await set(ref(db, "webrtc/offer"), { type: offer.type, sdp: offer.sdp });
 
-  setStatus("⏳ في انتظار المتحكم...", "waiting");
+  setStatus("⏳ Waiting for controller...", "waiting");
 
-  // استنى الـ answer من المتحكم
+  // Wait for answer from controller
   onValue(ref(db, "webrtc/answer"), async (snapshot) => {
     const answer = snapshot.val();
     if (!answer || pc.currentRemoteDescription) return;
 
     await pc.setRemoteDescription(new RTCSessionDescription(answer));
-    setStatus("🟡 تم تبادل الإشارة...", "waiting");
+    setStatus("🟡 Signal exchanged...", "waiting");
   });
 
-  // استنى ICE candidates من المتحكم
+  // Wait for ICE candidates from controller
   onValue(ref(db, "webrtc/answerCandidate"), async (snapshot) => {
     const candidate = snapshot.val();
     if (!candidate) return;
