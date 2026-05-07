@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎮 تحكم في العربية</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      gap: 16px;
+    }
+
+    h1 {
+      font-size: 1.3rem;
+      color: #00aaff;
+      letter-spacing: 3px;
+      margin-top: 8px;
+    }
+
+    video {
+      width: 100%;
+      max-width: 600px;
+      border-radius: 14px;
+      border: 2px solid #00aaff44;
+      background: #0d0d1a;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+    }
+
+    #status {
+      font-size: 0.85rem;
+      padding: 6px 18px;
+      border-radius: 20px;
+      border: 1px solid #333;
+      background: #111;
+      transition: all 0.3s;
+    }
+    #status.connected  { border-color: #00ff88; color: #00ff88; }
+    #status.waiting    { border-color: #ffaa00; color: #ffaa00; }
+    #status.error      { border-color: #ff4444; color: #ff4444; }
+
+    /* ======= D-PAD ======= */
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 80px);
+      grid-template-rows: repeat(3, 80px);
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .dpad button {
+      width: 80px;
+      height: 80px;
+      border: none;
+      border-radius: 14px;
+      font-size: 28px;
+      cursor: pointer;
+      background: #1a1a2e;
+      border: 2px solid #2a2a4e;
+      color: white;
+      transition: all 0.1s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .dpad button:active,
+    .dpad button.pressed {
+      background: #00aaff33;
+      border-color: #00aaff;
+      transform: scale(0.93);
+    }
+
+    .dpad .empty { background: transparent; border: none; cursor: default; }
+
+    #currentDir {
+      font-size: 0.8rem;
+      color: #666;
+      letter-spacing: 2px;
+    }
+
+    .connect-btn {
+      padding: 10px 28px;
+      background: #00aaff;
+      color: #0a0a0f;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+    }
+    .connect-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <h1>🎮 تحكم عن بُعد</h1>
+
+  <video id="remoteVideo" autoplay playsinline muted></video>
+
+  <div id="status" class="waiting">⏳ في انتظار الكاميرا...</div>
+
+  <button class="connect-btn" id="connectBtn" onclick="connect()">اتصل بالعربية</button>
+
+  <div class="dpad">
+    <div class="empty"></div>
+    <button id="btn-forward"  onpointerdown="press('forward')"  onpointerup="press('stop')" onpointerleave="press('stop')">⬆️</button>
+    <div class="empty"></div>
+
+    <button id="btn-left"     onpointerdown="press('left')"     onpointerup="press('stop')" onpointerleave="press('stop')">⬅️</button>
+    <button id="btn-stop"     onpointerdown="press('stop')">⏹️</button>
+    <button id="btn-right"    onpointerdown="press('right')"    onpointerup="press('stop')" onpointerleave="press('stop')">➡️</button>
+
+    <div class="empty"></div>
+    <button id="btn-backward" onpointerdown="press('backward')" onpointerup="press('stop')" onpointerleave="press('stop')">⬇️</button>
+    <div class="empty"></div>
+  </div>
+
+  <div id="currentDir">STOP</div>
+
+<script type="module">
+
+import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBUwwNGYKUqtZwZExUD6DMN9AAt6H5NRD0",
+  authDomain: "webcam-8fc00.firebaseapp.com",
+  databaseURL: "https://webcam-8fc00-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "webcam-8fc00",
+  storageBucket: "webcam-8fc00.firebasestorage.app",
+  messagingSenderId: "849910226798",
+  appId: "1:849910226798:web:95b42c4e350da9dd8bab7f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+const statusEl    = document.getElementById("status");
+const connectBtn  = document.getElementById("connectBtn");
+const currentDir  = document.getElementById("currentDir");
+
+const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+let pc = null;
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = cls;
+}
+
+// ======= تحكم في العربية =======
+window.press = async function(direction) {
+  currentDir.textContent = direction.toUpperCase();
+
+  // highlight active button
+  document.querySelectorAll('.dpad button').forEach(b => b.classList.remove('pressed'));
+  const btn = document.getElementById('btn-' + direction);
+  if (btn) btn.classList.add('pressed');
+
+  await set(ref(db, "car"), { direction });
+};
+
+// كيبورد للتحكم من اللابتوب
+const keyMap = {
+  'ArrowUp': 'forward', 'w': 'forward',
+  'ArrowDown': 'backward', 's': 'backward',
+  'ArrowLeft': 'left', 'a': 'left',
+  'ArrowRight': 'right', 'd': 'right',
+};
+
+document.addEventListener('keydown', (e) => {
+  if (keyMap[e.key]) press(keyMap[e.key]);
+});
+document.addEventListener('keyup', (e) => {
+  if (keyMap[e.key]) press('stop');
+});
+
+// ======= WebRTC - استقبال البث =======
+window.connect = async function() {
+  connectBtn.disabled = true;
+  setStatus("⏳ جاري الاتصال...", "waiting");
+
+  pc = new RTCPeerConnection(servers);
+
+  // ابعت ICE candidates بتاعتنا (الـ answer side)
+  pc.onicecandidate = async (e) => {
+    if (e.candidate) {
+      await set(ref(db, "webrtc/answerCandidate"), JSON.stringify(e.candidate));
+    }
+  };
+
+  // استقبل الفيديو
+  pc.ontrack = (e) => {
+    document.getElementById("remoteVideo").srcObject = e.streams[0];
+    setStatus("🟢 متصل - الكاميرا شغالة", "connected");
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "disconnected") {
+      setStatus("🔴 انقطع الاتصال", "error");
+      connectBtn.disabled = false;
+    }
+  };
+
+  // استنى الـ offer من الكاميرا
+  onValue(ref(db, "webrtc/offer"), async (snapshot) => {
+    const offer = snapshot.val();
+    if (!offer || pc.currentRemoteDescription) return;
+
+    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await set(ref(db, "webrtc/answer"), { type: answer.type, sdp: answer.sdp });
+
+    setStatus("🟡 تم تبادل الإشارة...", "waiting");
+  });
+
+  // استقبل ICE candidates من الكاميرا
+  onValue(ref(db, "webrtc/offerCandidate"), async (snapshot) => {
+    const candidate = snapshot.val();
+    if (!candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+    } catch (e) { /* ignore */ }
+  });
+};
+
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>📷 كاميرا العربية</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 20px;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      color: #00ff88;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    video {
+      width: 100%;
+      max-width: 500px;
+      border-radius: 12px;
+      border: 2px solid #00ff8844;
+      background: #111;
+    }
+
+    #status {
+      font-size: 0.9rem;
+      padding: 8px 20px;
+      border-radius: 20px;
+      border: 1px solid #333;
+      background: #111;
+      transition: all 0.3s;
+    }
+
+    #status.connected { border-color: #00ff88; color: #00ff88; }
+    #status.waiting   { border-color: #ffaa00; color: #ffaa00; }
+    #status.error     { border-color: #ff4444; color: #ff4444; }
+
+    button {
+      padding: 12px 32px;
+      background: #00ff88;
+      color: #0a0a0f;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: 1px;
+    }
+    button:disabled { background: #333; color: #666; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <h1>📷 كاميرا العربية</h1>
+
+  <video id="localVideo" autoplay playsinline muted></video>
+
+  <div id="status" class="waiting">⏳ جاهز للبدء</div>
+
+  <button id="startBtn" onclick="startCamera()">ابدأ البث</button>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getDatabase, ref, set, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBUwwNGYKUqtZwZExUD6DMN9AAt6H5NRD0",
+  authDomain: "webcam-8fc00.firebaseapp.com",
+  databaseURL: "https://webcam-8fc00-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "webcam-8fc00",
+  storageBucket: "webcam-8fc00.firebasestorage.app",
+  messagingSenderId: "849910226798",
+  appId: "1:849910226798:web:95b42c4e350da9dd8bab7f"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+const status   = document.getElementById("status");
+const startBtn = document.getElementById("startBtn");
+
+const servers = {
+  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+};
+
+let pc = null;
+
+function setStatus(msg, cls) {
+  status.textContent = msg;
+  status.className = cls;
+}
+
+window.startCamera = async function () {
+  startBtn.disabled = true;
+  setStatus("⏳ جاري فتح الكاميرا...", "waiting");
+
+  // امسح أي session قديم
+  await remove(ref(db, "webrtc"));
+
+  pc = new RTCPeerConnection(servers);
+
+  // ابعت ICE candidates بتاعتنا (الـ offer side)
+  pc.onicecandidate = async (e) => {
+    if (e.candidate) {
+      await set(ref(db, "webrtc/offerCandidate"), JSON.stringify(e.candidate));
+    }
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === "connected")  setStatus("🟢 متصل - البث شغال", "connected");
+    if (pc.connectionState === "disconnected") setStatus("🔴 انقطع الاتصال", "error");
+  };
+
+  // افتح الكاميرا
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+  } catch (err) {
+    setStatus("❌ مش قادر يفتح الكاميرا: " + err.message, "error");
+    startBtn.disabled = false;
+    return;
+  }
+
+  document.getElementById("localVideo").srcObject = stream;
+  stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+  // اعمل offer وارفعه على Firebase
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  await set(ref(db, "webrtc/offer"), { type: offer.type, sdp: offer.sdp });
+
+  setStatus("⏳ في انتظار المتحكم...", "waiting");
+
+  // استنى الـ answer من المتحكم
+  onValue(ref(db, "webrtc/answer"), async (snapshot) => {
+    const answer = snapshot.val();
+    if (!answer || pc.currentRemoteDescription) return;
+
+    await pc.setRemoteDescription(new RTCSessionDescription(answer));
+    setStatus("🟡 تم تبادل الإشارة...", "waiting");
+  });
+
+  // استنى ICE candidates من المتحكم
+  onValue(ref(db, "webrtc/answerCandidate"), async (snapshot) => {
+    const candidate = snapshot.val();
+    if (!candidate) return;
+    try {
+      await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
+    } catch (e) { /* ignore */ }
+  });
+};
+
+</script>
+</body>
+</html>
