@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>📷 كاميرا العربية</title>
+  <title>Car Camera</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -69,9 +69,9 @@
 
   <video id="localVideo" autoplay playsinline muted></video>
 
-  <div id="status" class="waiting">⏳ جاهز للبدء</div>
+  <div id="status" class="waiting">Ready To Start</div>
 
-  <button id="startBtn" onclick="startCamera()">ابدأ البث</button>
+  <button id="startBtn" onclick="startCamera()">Start Steaming</button>
 
 <script type="module">
 
@@ -122,8 +122,8 @@ window.startCamera = async function () {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "connected")  setStatus("🟢 متصل - البث شغال", "connected");
-    if (pc.connectionState === "disconnected") setStatus("🔴 انقطع الاتصال", "error");
+    if (pc.connectionState === "connected")  setStatus("🟢 Connected ", "connected");
+    if (pc.connectionState === "disconnected") setStatus("🔴 Connection lost", "error");
   };
 
   // افتح الكاميرا
