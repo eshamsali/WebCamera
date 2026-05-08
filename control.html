@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title> Control The Car</title>
+  <title>Control The Car</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -48,7 +48,6 @@
     #status.waiting    { border-color: #ffaa00; color: #ffaa00; }
     #status.error      { border-color: #ff4444; color: #ff4444; }
 
-    /* ======= D-PAD ======= */
     .dpad {
       display: grid;
       grid-template-columns: repeat(3, 80px);
@@ -79,7 +78,7 @@
       transform: scale(0.93);
     }
 
-    .dpad .empty { background: transparent; border: none; cursor: default; }
+    .dpad .empty { background: transparent; border: none; cursor: default; pointer-events: none; }
 
     #currentDir {
       font-size: 0.8rem;
@@ -104,30 +103,31 @@
 </head>
 <body>
 
-  <h1>Remote control </h1>
+  <h1>Remote Control 🚗</h1>
 
   <video id="remoteVideo" autoplay playsinline muted></video>
 
-  <div id="status" class="waiting">⏳ Waiting for the camera..</div>
+  <div id="status" class="waiting">⏳ Waiting for the camera...</div>
 
-  <button class="connect-btn" id="connectBtn" onclick="connect()">Connect to the car</button>
+  <button class="connect-btn" id="connectBtn">Connect to the car</button>
 
   <div class="dpad">
     <div class="empty"></div>
-    <button id="btn-forward"  onpointerdown="press('forward')"  onpointerup="press('stop')" onpointerleave="press('stop')">⬆️</button>
+    <button id="btn-forward">⬆️</button>
     <div class="empty"></div>
 
-    <button id="btn-left"     onpointerdown="press('left')"     onpointerup="press('stop')" onpointerleave="press('stop')">⬅️</button>
-    <button id="btn-stop"     onpointerdown="press('stop')">⏹️</button>
-    <button id="btn-right"    onpointerdown="press('right')"    onpointerup="press('stop')" onpointerleave="press('stop')">➡️</button>
+    <button id="btn-left">➡️</button>
+    <button id="btn-stop">⏹️</button>
+    <button id="btn-right">⬅️</button>
 
     <div class="empty"></div>
-    <button id="btn-backward" onpointerdown="press('backward')" onpointerup="press('stop')" onpointerleave="press('stop')">⬇️</button>
+    <button id="btn-backward">⬇️</button>
     <div class="empty"></div>
   </div>
 
   <div id="currentDir">STOP</div>
 
+<!-- ✅ script عادي مش module عشان الـ event listeners هنضيفهم بـ JS مش inline HTML -->
 <script type="module">
 
 import { initializeApp }  from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
@@ -146,9 +146,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
 
-const statusEl    = document.getElementById("status");
-const connectBtn  = document.getElementById("connectBtn");
-const currentDir  = document.getElementById("currentDir");
+const statusEl   = document.getElementById("status");
+const connectBtn = document.getElementById("connectBtn");
+const currentDir = document.getElementById("currentDir");
 
 const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
 let pc = null;
@@ -158,51 +158,60 @@ function setStatus(msg, cls) {
   statusEl.className = cls;
 }
 
-// ======= تحكم في العربية =======
-window.press = async function(direction) {
+// ✅ ضيف الـ event listeners بـ JS مباشرة بدل inline HTML
+async function press(direction) {
   currentDir.textContent = direction.toUpperCase();
-
-  // highlight active button
   document.querySelectorAll('.dpad button').forEach(b => b.classList.remove('pressed'));
   const btn = document.getElementById('btn-' + direction);
   if (btn) btn.classList.add('pressed');
-
   await set(ref(db, "car"), { direction });
+}
+
+// D-Pad buttons
+const btnMap = {
+  'btn-forward':  'forward',
+  'btn-backward': 'backward',
+  'btn-left':     'left',
+  'btn-right':    'right',
+  'btn-stop':     'stop',
 };
 
-// كيبورد للتحكم من اللابتوب
+Object.entries(btnMap).forEach(([id, dir]) => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('pointerdown', () => press(dir));
+  if (dir !== 'stop') {
+    el.addEventListener('pointerup',    () => press('stop'));
+    el.addEventListener('pointerleave', () => press('stop'));
+  }
+});
+
+// Keyboard
 const keyMap = {
   'ArrowUp': 'forward', 'w': 'forward',
   'ArrowDown': 'backward', 's': 'backward',
   'ArrowLeft': 'left', 'a': 'left',
   'ArrowRight': 'right', 'd': 'right',
 };
+document.addEventListener('keydown', (e) => { if (keyMap[e.key]) press(keyMap[e.key]); });
+document.addEventListener('keyup',   (e) => { if (keyMap[e.key]) press('stop'); });
 
-document.addEventListener('keydown', (e) => {
-  if (keyMap[e.key]) press(keyMap[e.key]);
-});
-document.addEventListener('keyup', (e) => {
-  if (keyMap[e.key]) press('stop');
-});
-
-// ======= WebRTC - استقبال البث =======
-window.connect = async function() {
+// ✅ Connect button
+async function connect() {
   connectBtn.disabled = true;
-  setStatus("⏳ Waiting for controller...", "waiting");
+  setStatus("⏳ Looking for camera...", "waiting");
 
   pc = new RTCPeerConnection(servers);
 
-  // ابعت ICE candidates بتاعتنا (الـ answer side)
   pc.onicecandidate = async (e) => {
     if (e.candidate) {
       await set(ref(db, "webrtc/answerCandidate"), JSON.stringify(e.candidate));
     }
   };
 
-  // استقبل الفيديو
   pc.ontrack = (e) => {
     document.getElementById("remoteVideo").srcObject = e.streams[0];
-    setStatus("🟢Connected", "connected");
+    setStatus("🟢 Connected - Stream live", "connected");
   };
 
   pc.onconnectionstatechange = () => {
@@ -212,18 +221,16 @@ window.connect = async function() {
     }
   };
 
-  // استنى الـ offer من الكاميرا
+  // انتظر الـ offer من الكاميرا
   onValue(ref(db, "webrtc/offer"), async (snapshot) => {
     const offer = snapshot.val();
     if (!offer || pc.currentRemoteDescription) return;
 
     await pc.setRemoteDescription(new RTCSessionDescription(offer));
-
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     await set(ref(db, "webrtc/answer"), { type: answer.type, sdp: answer.sdp });
-
-    setStatus("🟡 Signal exhanged...", "waiting");
+    setStatus("🟡 Signal exchanged...", "waiting");
   });
 
   // استقبل ICE candidates من الكاميرا
@@ -234,7 +241,9 @@ window.connect = async function() {
       await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(candidate)));
     } catch (e) { /* ignore */ }
   });
-};
+}
+
+connectBtn.addEventListener('click', connect);
 
 </script>
 </body>
